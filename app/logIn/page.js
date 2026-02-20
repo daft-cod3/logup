@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { api } from '../lib/api';
+import { getAuthToken, setAuthToken } from '../lib/auth';
 
 export default function Login() {
   const router = useRouter();
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8001';
-
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -14,9 +14,21 @@ export default function Login() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (getAuthToken()) {
+      router.replace('/');
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('registered') === 'true') {
+      setSuccess('Account created successfully. Please sign in.');
+    }
+  }, [router]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -24,65 +36,40 @@ export default function Login() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    setError('');
+    setSuccess('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-    if (loading) return;
-
     setLoading(true);
+    setError('');
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: formData.email, password: formData.password }),
+      const response = await api.login({
+        username: formData.email,
+        password: formData.password
       });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (typeof data?.detail === 'string') {
-          setError(data.detail);
-          return;
-        }
-        if (Array.isArray(data?.detail)) {
-          const message = data.detail
-            .map((err) => (typeof err?.msg === 'string' ? err.msg : null))
-            .filter(Boolean)
-            .join(', ');
-          setError(message || `Login failed (${response.status})`);
-          return;
-        }
-        setError(`Login failed (${response.status})`);
-        return;
-      }
-
-      const accessToken = data?.access_token;
-      if (typeof accessToken !== 'string' || accessToken.length === 0) {
-        setError('Login failed: missing token from server');
-        return;
-      }
-
-      const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-      storage.setItem('logup_token', accessToken);
-      setSuccess('Signed in successfully. Redirecting...');
-      setTimeout(() => router.push('/'), 600);
-    } catch {
-      setError(`Could not reach the API server at ${API_BASE_URL}. Start the backend and try again.`);
+      
+      setAuthToken(response.access_token, { rememberMe: formData.rememberMe });
+      
+      // Redirect to dashboard or home
+      router.push('/');
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 backdrop-blur-sm bg-gradient-to-br from-blue-600/20 via-indigo-600/20 to-purple-700/20"></div>
+    <div className="min-h-screen bg-linear-to-br from-blue-600 via-indigo-600 to-purple-700 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute inset-0 backdrop-blur-sm bg-linear-to-br from-blue-600/20 via-indigo-600/20 to-purple-700/20"></div>
       <div className="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-purple-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
       <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 w-full max-w-md transform transition-all duration-500 hover:scale-[1.02] hover:shadow-3xl border border-white/20 relative z-10 animate-fadeInUp">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 transform transition-all duration-300 hover:scale-110 hover:rotate-12 hover:shadow-lg animate-bounceIn">
+          <div className="w-16 h-16 bg-linear-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 transform transition-all duration-300 hover:scale-110 hover:rotate-12 hover:shadow-lg animate-bounceIn">
             <svg className="w-8 h-8 text-white transition-transform duration-300 hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
@@ -92,15 +79,25 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {success && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg animate-slideInDown">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg animate-slideInDown">
+              {error}
+            </div>
+          )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email or Username</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <input 
-              type="text" 
+              type="email" 
               name="email"
               value={formData.email}
               onChange={handleInputChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300 hover:border-blue-400 hover:shadow-md focus:scale-[1.02] bg-white/80 backdrop-blur-sm" 
-              placeholder="Enter email or username"
+              placeholder="Enter your email"
               required
             />
           </div>
@@ -152,20 +149,13 @@ export default function Login() {
             </Link>
           </div>
 
-          {success && (
-            <div className="text-sm text-green-700">{success}</div>
-          )}
-          {error && (
-            <div className="text-sm text-red-600">{error}</div>
-          )}
-
           <button 
             type="submit" 
             disabled={loading}
-            className={`w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+            className="w-full bg-linear-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
-            <span className="relative">{loading ? 'Signing in...' : 'Sign In'}</span>
+            <span className="absolute inset-0 bg-linear-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
+            <span className="relative">{loading ? 'Signing In...' : 'Sign In'}</span>
           </button>
 
           <button 
@@ -252,8 +242,8 @@ export default function Login() {
                 />
               ))}
             </div>
-            <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 mb-4 relative overflow-hidden group">
-              <span className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
+            <button className="w-full bg-linear-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 mb-4 relative overflow-hidden group">
+              <span className="absolute inset-0 bg-linear-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
               <span className="relative">Verify OTP</span>
             </button>
             <p className="text-center text-sm text-gray-600">

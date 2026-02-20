@@ -2,11 +2,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { api } from '../lib/api';
 
 export default function Signup() {
   const router = useRouter();
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8001';
-
   const kenyanCounties = [
     'Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa',
     'Homa Bay', 'Isiolo', 'Kajiado', 'Kakamega', 'Kericho', 'Kiambu', 'Kilifi',
@@ -19,7 +18,6 @@ export default function Signup() {
 
   const [formData, setFormData] = useState({
     fullName: '',
-    username: '',
     email: '',
     county: '',
     phoneNumber: '',
@@ -28,128 +26,39 @@ export default function Signup() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [passwordChecks, setPasswordChecks] = useState({
-    length: false,
-    upper: false,
-    lower: false,
-    number: false,
-    notUsername: true
-  });
-
-  const validatePassword = (password, username) => {
-    const checks = {
-      length: password.length >= 8,
-      upper: /[A-Z]/.test(password),
-      lower: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-      notUsername: username ? password !== username : true,
-    };
-    return checks;
-  };
-
-  const generateStrongPassword = (length = 12, username = '') => {
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lower = 'abcdefghijklmnopqrstuvwxyz';
-    const numbers = '0123456789';
-    const all = upper + lower + numbers;
-    let pw = '';
-    // ensure at least one of each category
-    pw += upper[Math.floor(Math.random() * upper.length)];
-    pw += lower[Math.floor(Math.random() * lower.length)];
-    pw += numbers[Math.floor(Math.random() * numbers.length)];
-    for (let i = 3; i < length; i++) {
-      pw += all[Math.floor(Math.random() * all.length)];
-    }
-    // shuffle
-    pw = pw.split('').sort(() => 0.5 - Math.random()).join('');
-    // if accidentally equals username, flip last char
-    if (username && pw === username) {
-      pw = pw.slice(0, -1) + (pw.slice(-1) === 'A' ? 'B' : 'A');
-    }
-    return pw;
-  };
+  const [error, setError] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => {
-      const next = { ...prev, [name]: value };
-      // re-run password validation if username or password changed
-      if (name === 'password' || name === 'username') {
-        setPasswordChecks(validatePassword(next.password, next.username));
-      }
-      return next;
-    });
-  };
-
-  const handleSuggestPassword = () => {
-    const suggestion = generateStrongPassword(12, formData.username);
-    setFormData(prev => ({ ...prev, password: suggestion, confirmPassword: suggestion }));
-    setPasswordChecks(validatePassword(suggestion, formData.username));
+    setFormData(prev => ({ ...prev, [name]: value }));
     setError('');
-    setSuccess('Suggested a strong password - you can edit it.');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
-
-    if (loading) return;
-
-    // Basic checks: password matches confirm, password strength, password != username
+    
+    
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
-    const checks = validatePassword(formData.password, formData.username);
-    setPasswordChecks(checks);
-
-    const allGood = Object.values(checks).every(v => v === true);
-    if (!allGood) {
-      setError('Password is not strong enough. Make sure it has uppercase, lowercase, numbers, and is not the same as the username (min 8 chars).');
-      return;
-    }
-
+    
     setLoading(true);
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          username: formData.username,
-          full_name: formData.fullName || null,
-          password: formData.password,
-        }),
+      await api.signup({
+        email: formData.email,
+        username: formData.email,
+        password: formData.password,
+        full_name: formData.fullName,
       });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        if (typeof data?.detail === 'string') {
-          setError(data.detail);
-          return;
-        }
-        if (Array.isArray(data?.detail)) {
-          const message = data.detail
-            .map((err) => (typeof err?.msg === 'string' ? err.msg : null))
-            .filter(Boolean)
-            .join(', ');
-          setError(message || `Signup failed (${response.status})`);
-          return;
-        }
-        setError(`Signup failed (${response.status})`);
-        return;
-      }
-
-      setSuccess('Account created successfully. Redirecting to sign in...');
-      setTimeout(() => router.push('/logIn'), 800);
-    } catch {
-      setError(`Could not reach the API server at ${API_BASE_URL}. Start the backend and try again.`);
+      
+      
+      router.push('/logIn?registered=true');
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -172,6 +81,11 @@ export default function Signup() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg animate-slideInDown">
+              {error}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
             <input 
@@ -181,19 +95,6 @@ export default function Signup() {
               onChange={handleInputChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300 hover:border-blue-400 hover:shadow-md focus:scale-[1.02] bg-white/80 backdrop-blur-sm" 
               placeholder="Enter your full name"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-            <input
-              type="text"
-              name="username"
-              value={formData.username}
-              onChange={handleInputChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300 hover:border-blue-400 hover:shadow-md focus:scale-[1.02] bg-white/80 backdrop-blur-sm"
-              placeholder="Choose a username (used to login)"
               required
             />
           </div>
@@ -269,34 +170,6 @@ export default function Signup() {
                 )}
               </button>
             </div>
-
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-sm text-gray-600">Password must:</div>
-              <button type="button" onClick={handleSuggestPassword} className="text-sm text-blue-600 hover:underline">Suggest strong password</button>
-            </div>
-
-            <ul className="mt-2 grid grid-cols-1 gap-1 text-sm">
-              <li className={"flex items-center " + (passwordChecks.length ? 'text-green-600' : 'text-gray-600') }>
-                <span className="w-4 inline-block">{passwordChecks.length ? '✓' : '•'}</span>
-                <span className="ml-2">At least 8 characters</span>
-              </li>
-              <li className={"flex items-center " + (passwordChecks.upper ? 'text-green-600' : 'text-gray-600') }>
-                <span className="w-4 inline-block">{passwordChecks.upper ? '✓' : '•'}</span>
-                <span className="ml-2">Contains an uppercase letter</span>
-              </li>
-              <li className={"flex items-center " + (passwordChecks.lower ? 'text-green-600' : 'text-gray-600') }>
-                <span className="w-4 inline-block">{passwordChecks.lower ? '✓' : '•'}</span>
-                <span className="ml-2">Contains a lowercase letter</span>
-              </li>
-              <li className={"flex items-center " + (passwordChecks.number ? 'text-green-600' : 'text-gray-600') }>
-                <span className="w-4 inline-block">{passwordChecks.number ? '✓' : '•'}</span>
-                <span className="ml-2">Contains a number</span>
-              </li>
-              <li className={"flex items-center " + (passwordChecks.notUsername ? 'text-green-600' : 'text-gray-600') }>
-                <span className="w-4 inline-block">{passwordChecks.notUsername ? '✓' : '•'}</span>
-                <span className="ml-2">Is not the same as your username</span>
-              </li>
-            </ul>
           </div>
 
           <div>
@@ -312,20 +185,13 @@ export default function Signup() {
             />
           </div>
 
-          {success && (
-            <div className="text-sm text-green-700">{success}</div>
-          )}
-          {error && (
-            <div className="text-sm text-red-600">{error}</div>
-          )}
-
           <button 
             type="submit" 
             disabled={loading}
-            className={`w-full bg-linear-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+            className="w-full bg-linear-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             <span className="absolute inset-0 bg-linear-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
-            <span className="relative">{loading ? 'Creating...' : 'Create Account'}</span>
+            <span className="relative">{loading ? 'Creating Account...' : 'Create Account'}</span>
           </button>
         </form>
 
