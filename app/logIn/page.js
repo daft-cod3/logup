@@ -1,8 +1,12 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function Login() {
+  const router = useRouter();
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8001';
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -10,6 +14,9 @@ export default function Login() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -19,9 +26,53 @@ export default function Login() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login:', formData);
+    setError('');
+    setSuccess('');
+    if (loading) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: formData.email, password: formData.password }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (typeof data?.detail === 'string') {
+          setError(data.detail);
+          return;
+        }
+        if (Array.isArray(data?.detail)) {
+          const message = data.detail
+            .map((err) => (typeof err?.msg === 'string' ? err.msg : null))
+            .filter(Boolean)
+            .join(', ');
+          setError(message || `Login failed (${response.status})`);
+          return;
+        }
+        setError(`Login failed (${response.status})`);
+        return;
+      }
+
+      const accessToken = data?.access_token;
+      if (typeof accessToken !== 'string' || accessToken.length === 0) {
+        setError('Login failed: missing token from server');
+        return;
+      }
+
+      const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+      storage.setItem('logup_token', accessToken);
+      setSuccess('Signed in successfully. Redirecting...');
+      setTimeout(() => router.push('/'), 600);
+    } catch {
+      setError(`Could not reach the API server at ${API_BASE_URL}. Start the backend and try again.`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,14 +93,14 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email or Username</label>
             <input 
-              type="email" 
+              type="text" 
               name="email"
               value={formData.email}
               onChange={handleInputChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300 hover:border-blue-400 hover:shadow-md focus:scale-[1.02] bg-white/80 backdrop-blur-sm" 
-              placeholder="Enter your email"
+              placeholder="Enter email or username"
               required
             />
           </div>
@@ -101,12 +152,20 @@ export default function Login() {
             </Link>
           </div>
 
+          {success && (
+            <div className="text-sm text-green-700">{success}</div>
+          )}
+          {error && (
+            <div className="text-sm text-red-600">{error}</div>
+          )}
+
           <button 
             type="submit" 
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group"
+            disabled={loading}
+            className={`w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl active:scale-95 relative overflow-hidden group ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <span className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
-            <span className="relative">Sign In</span>
+            <span className="relative">{loading ? 'Signing in...' : 'Sign In'}</span>
           </button>
 
           <button 

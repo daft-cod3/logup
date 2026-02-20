@@ -9,10 +9,13 @@ from .db.session import engine
 app = FastAPI(title=settings.project_name)
 
 
-@app.on_event("startup")
 def create_db_and_tables() -> None:
     """Ensure database schema exists so first signup succeeds without a manual init."""
     Base.metadata.create_all(bind=engine)
+
+
+# Use Starlette's event handler registration (avoids deprecated FastAPI on_event decorator).
+app.add_event_handler("startup", create_db_and_tables)
 
 
 app.add_middleware(

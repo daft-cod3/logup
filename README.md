@@ -64,22 +64,34 @@ my-app/
 
 ## Getting Started
 
-1. Navigate to the project directory:
+### Option A (Windows): Start Both Servers
+```bat
+start_all.bat
+```
+
+### Option B: Start Manually
+1. Start the backend API (FastAPI):
    ```bash
-   cd my-app
+   cd backend
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
    ```
 
-2. Install dependencies:
+2. Start the frontend (Next.js) in the project root:
    ```bash
    npm install
-   ```
-
-3. Run the development server:
-   ```bash
    npm run dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+3. Open:
+   - http://localhost:3000 (UI)
+   - http://localhost:8001/docs (API docs)
+
+If you run the backend on a different port, set `NEXT_PUBLIC_API_BASE_URL` before starting `npm run dev`.
+
+Note: `0.0.0.0` is a bind address, not a browser address. Use `localhost`/`127.0.0.1`.
 
 ## Navigation Flow
 

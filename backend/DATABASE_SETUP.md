@@ -17,10 +17,14 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python init_db.py
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-On Windows you can also run `startup.bat`.
+Then open:
+- http://localhost:8001/docs
+- http://localhost:8001/health
+
+On Windows you can also run `startup.bat` (optionally pass a port, e.g. `startup.bat 8001`).
 
 ## API Overview
 - `POST /auth/signup` — register user (`email`, `username`, `password`, `full_name?`)
